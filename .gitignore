@@ -1,0 +1,6 @@
+Logs - ログファイル（エラー記録など）logs.log
+npm-debug.logyarn-debug.log*yarn-error.log*pnpm-debug.log*lerna-debug.log*Runtime artifacts - 実行時に生成される不要なファイル
+node_modulesdistdist-ssr*.localEditor directories and files - エディタ固有の設定.
+vscode/*!.vscode/extensions.json.idea.DS_Store*.suo.ntvs*.njsproj*.sln*.sw?Testing - テスト結果（今回導入したVitest関連）/coveragesnapshots/Firebase - Firebaseのデプロイ時に生成される一時ファイル
+.firebase/firebase-debug.log*firestore-debug.log*ui-debug.log*Environment variables - 環境変数（APIキーなどの機密情報）.env.env.local.env.*.local
+node_modules
