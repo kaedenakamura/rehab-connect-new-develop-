@@ -1,13 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, appId } from '../firebase';
-import { collection, onSnapshot, addDoc, serverTimestamp, query } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Activity, Save, TrendingUp } from 'lucide-react';
+import { Activity, Save, TrendingUp, Clock, FileText } from 'lucide-react';
+import { formatRecordDate, formatSoapField, sortRecordsByDate } from '../utils/rehabUtils';
 
 export default function PatientDetail({ patientId }) {
   const [records, setRecords] = useState([]);
   const [soap, setSoap] = useState({ s: '', o: '', a: '', p: '', rom: 120, vas: 0 });
+  const [historyRecords, setHistoryRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [staffName, setStaffName] = useState('');
 
+  // グラフ用のrecords取得（既存機能）
   useEffect(() => {
     if (!patientId) return;
     // Rule 1: Correct pathing
@@ -23,6 +28,35 @@ export default function PatientDetail({ patientId }) {
     return () => unsubscribe();
   }, [patientId]);
 
+  // 履歴表示用のrecords取得（新機能）
+  useEffect(() => {
+    if (!patientId) return;
+    setLoading(true);
+    
+    const q = collection(db, 'artifacts', appId, 'public', 'data', 'records');
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      try {
+        // patientIdでフィルタリング
+        const filtered = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(r => r.patientId === patientId);
+        
+        // 日付順にソート（新しい順）
+        const sorted = sortRecordsByDate(filtered, false);
+        setHistoryRecords(sorted);
+      } catch (error) {
+        console.error('履歴データの取得に失敗しました:', error);
+      } finally {
+        setLoading(false);
+      }
+    }, (err) => {
+      console.error('履歴データの取得に失敗しました:', err);
+      setLoading(false);
+    });
+    
+    return () => unsubscribe();
+  }, [patientId]);
+
   const handleSave = async (e) => {
     e.preventDefault();
     try {
@@ -30,10 +64,16 @@ export default function PatientDetail({ patientId }) {
         patientId,
         date: new Date().toISOString().split('T')[0],
         ...soap,
+        staffName: staffName || '未記入',
         timestamp: serverTimestamp()
       });
       setSoap({ s: '', o: '', a: '', p: '', rom: 120, vas: 0 });
-    } catch (e) { console.error(e); }
+      setStaffName('');
+      alert('記録を保存しました！');
+    } catch (e) { 
+      console.error(e);
+      alert('保存に失敗しました。');
+    }
   };
 
   return (
@@ -83,6 +123,16 @@ export default function PatientDetail({ patientId }) {
             <input type="number" className="w-full bg-slate-50 p-3 rounded-xl border-none mt-1" value={soap.vas} onChange={e => setSoap({ ...soap, vas: e.target.value })} />
           </div>
         </div>
+        <div>
+          <label className="text-xs font-bold text-slate-400 uppercase">記入者名</label>
+          <input 
+            type="text" 
+            className="w-full bg-slate-50 p-3 rounded-xl border-none mt-1" 
+            value={staffName} 
+            onChange={e => setStaffName(e.target.value)}
+            placeholder="担当者名を入力"
+          />
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SoapBox label="S" value={soap.s} onChange={v => setSoap({ ...soap, s: v })} />
           <SoapBox label="O" value={soap.o} onChange={v => setSoap({ ...soap, o: v })} />
@@ -93,6 +143,31 @@ export default function PatientDetail({ patientId }) {
           <Save size={20} /> 記録を保存する
         </button>
       </form>
+
+      {/* SOAP History Section (新規追加) */}
+      <div className="bg-white p-8 rounded-3xl border shadow-sm">
+        <h3 className="text-xl font-bold border-b pb-4 flex items-center gap-2">
+          <FileText size={22} />
+          治療経過履歴 (SOAP)
+        </h3>
+        
+        {loading ? (
+          <div className="text-center py-10 text-slate-400">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900 mx-auto mb-4"></div>
+            読み込み中...
+          </div>
+        ) : historyRecords.length === 0 ? (
+          <div className="text-center py-10 text-slate-400">
+            まだ記録がありません。
+          </div>
+        ) : (
+          <div className="space-y-4 mt-6">
+            {historyRecords.map((record) => (
+              <SoapHistoryCard key={record.id} record={record} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -102,6 +177,63 @@ function SoapBox({ label, value, onChange }) {
     <div className="space-y-1">
       <span className="text-xs font-black text-slate-400">{label} (Subjective/Objective/etc.)</span>
       <textarea className="w-full bg-slate-50 rounded-xl p-3 h-24 text-sm border-none focus:ring-2 focus:ring-blue-500" value={value} onChange={e => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+// 履歴カードコンポーネント（新規追加）
+function SoapHistoryCard({ record }) {
+  const formattedDate = formatRecordDate(record.timestamp || record.date);
+  
+  return (
+    <div className="border border-slate-200 rounded-2xl p-6 hover:shadow-md transition-shadow bg-slate-50">
+      {/* ヘッダー部分 */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200">
+        <div className="flex items-center gap-3">
+          <Clock size={18} className="text-blue-600" />
+          <span className="font-bold text-slate-800">{formattedDate}</span>
+        </div>
+        {record.staffName && (
+          <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-semibold">
+            {record.staffName}
+          </span>
+        )}
+      </div>
+
+      {/* 評価指標 */}
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <span className="text-xs text-slate-500 font-semibold block mb-1">ROM (可動域)</span>
+          <span className="text-2xl font-bold text-blue-600">{record.rom || '-'}°</span>
+        </div>
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <span className="text-xs text-slate-500 font-semibold block mb-1">VAS (痛み)</span>
+          <span className="text-2xl font-bold text-rose-600">{record.vas || '-'}/10</span>
+        </div>
+      </div>
+
+      {/* SOAP記録 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SoapHistoryBox label="S (主観的データ)" value={record.s} />
+        <SoapHistoryBox label="O (客観的データ)" value={record.o} />
+        <SoapHistoryBox label="A (評価・アセスメント)" value={record.a} />
+        <SoapHistoryBox label="P (計画・プラン)" value={record.p} />
+      </div>
+    </div>
+  );
+}
+
+// 履歴表示用のSOAPボックス
+function SoapHistoryBox({ label, value }) {
+  const displayText = formatSoapField(value);
+  const isEmpty = displayText === '特記なし';
+  
+  return (
+    <div className="bg-white rounded-xl p-4 border border-slate-200">
+      <div className="text-xs font-bold text-slate-500 mb-2">{label}</div>
+      <div className={`text-sm ${isEmpty ? 'text-slate-400 italic' : 'text-slate-700'}`}>
+        {displayText}
+      </div>
     </div>
   );
 }

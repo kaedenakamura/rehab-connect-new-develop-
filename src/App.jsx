@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
   getFirestore, collection, doc, addDoc, onSnapshot,
-  serverTimestamp, deleteDoc
+  serverTimestamp, deleteDoc, query, orderBy
 } from 'firebase/firestore';
 import {
   getAuth, onAuthStateChanged, signInAnonymously
@@ -14,8 +14,9 @@ import {
 import {
   Activity, LayoutDashboard, Calendar, Users,
   Clipboard, Plus, ChevronRight, Clock, Trash2,
-  Save, TrendingUp, Search
+  Save, TrendingUp, Search, FileText
 } from 'lucide-react';
+import { formatDate, getDisplayText } from './utils/rehabUtils';
 
 // ==========================================
 // 1. Firebase設定
