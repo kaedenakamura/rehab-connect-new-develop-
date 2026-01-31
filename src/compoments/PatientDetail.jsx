@@ -41,7 +41,7 @@ export default function PatientDetail({ patientId }) {
       {/* Progress Graphs */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-3xl border shadow-sm">
-          <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><TrendingUp size={18}/> ROM (可動域) の推移</h3>
+          <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><TrendingUp size={18} /> ROM (可動域) の推移</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={records}>
@@ -55,7 +55,7 @@ export default function PatientDetail({ patientId }) {
           </div>
         </div>
         <div className="bg-white p-6 rounded-3xl border shadow-sm">
-          <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Activity size={18}/> VAS (痛み) の推移</h3>
+          <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Activity size={18} /> VAS (痛み) の推移</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={records}>
@@ -76,18 +76,18 @@ export default function PatientDetail({ patientId }) {
         <div className="grid grid-cols-2 gap-6">
           <div>
             <label className="text-xs font-bold text-slate-400 uppercase">ROM (度)</label>
-            <input type="number" className="w-full bg-slate-50 p-3 rounded-xl border-none mt-1" value={soap.rom} onChange={e => setSoap({...soap, rom: e.target.value})} />
+            <input type="number" className="w-full bg-slate-50 p-3 rounded-xl border-none mt-1" value={soap.rom} onChange={e => setSoap({ ...soap, rom: e.target.value })} />
           </div>
           <div>
             <label className="text-xs font-bold text-slate-400 uppercase">VAS (0-10)</label>
-            <input type="number" className="w-full bg-slate-50 p-3 rounded-xl border-none mt-1" value={soap.vas} onChange={e => setSoap({...soap, vas: e.target.value})} />
+            <input type="number" className="w-full bg-slate-50 p-3 rounded-xl border-none mt-1" value={soap.vas} onChange={e => setSoap({ ...soap, vas: e.target.value })} />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SoapBox label="S" value={soap.s} onChange={v => setSoap({...soap, s: v})} />
-          <SoapBox label="O" value={soap.o} onChange={v => setSoap({...soap, o: v})} />
-          <SoapBox label="A" value={soap.a} onChange={v => setSoap({...soap, a: v})} />
-          <SoapBox label="P" value={soap.p} onChange={v => setSoap({...soap, p: v})} />
+          <SoapBox label="S" value={soap.s} onChange={v => setSoap({ ...soap, s: v })} />
+          <SoapBox label="O" value={soap.o} onChange={v => setSoap({ ...soap, o: v })} />
+          <SoapBox label="A" value={soap.a} onChange={v => setSoap({ ...soap, a: v })} />
+          <SoapBox label="P" value={soap.p} onChange={v => setSoap({ ...soap, p: v })} />
         </div>
         <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-black transition-colors flex items-center justify-center gap-2">
           <Save size={20} /> 記録を保存する

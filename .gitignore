@@ -4,3 +4,6 @@ node_modulesdistdist-ssr*.localEditor directories and files - エディタ固有
 vscode/*!.vscode/extensions.json.idea.DS_Store*.suo.ntvs*.njsproj*.sln*.sw?Testing - テスト結果（今回導入したVitest関連）/coveragesnapshots/Firebase - Firebaseのデプロイ時に生成される一時ファイル
 .firebase/firebase-debug.log*firestore-debug.log*ui-debug.log*Environment variables - 環境変数（APIキーなどの機密情報）.env.env.local.env.*.local
 node_modules
+
+.env
+.env.local
