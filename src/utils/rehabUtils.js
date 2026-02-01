@@ -13,7 +13,7 @@ export const checkPainProgress = (currentVas, prevVas) => {
   return '不変';
 };
 
-// 日付のフォーマット（Timestamp型をYYYY/MM/DD形式に変換）
+// 日付のフォーマット
 export const formatDate = (timestamp) => {
   if (!timestamp) return '日付なし';
   
@@ -36,7 +36,7 @@ export const formatDate = (timestamp) => {
     });
   }
   
-  // 文字列の場合（YYYY-MM-DD形式など）
+  // 文字列の場合
   if (typeof timestamp === 'string') {
     const date = new Date(timestamp);
     if (!isNaN(date.getTime())) {
@@ -59,7 +59,7 @@ export const getDisplayText = (text, defaultText = '特記なし') => {
   return text;
 };
 
-// SOAP履歴用：日付のフォーマット（Timestamp型をYYYY/MM/DD形式に変換）
+// SOAP履歴用：日付のフォーマット
 export const formatRecordDate = (timestamp) => {
   if (!timestamp) return '日付なし';
   

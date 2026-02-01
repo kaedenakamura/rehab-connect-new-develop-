@@ -1,239 +1,293 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { db, appId } from '../firebase';
-import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Activity, Save, TrendingUp, Clock, FileText } from 'lucide-react';
-import { formatRecordDate, formatSoapField, sortRecordsByDate } from '../utils/rehabUtils';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  addDoc,
+  query,
+  orderBy,
+  onSnapshot,
+  serverTimestamp
+} from 'firebase/firestore';
+import {
+  ChevronLeft,
+  Save,
+  ClipboardList,
+  History,
+  User,
+  Activity,
+  Trash2,
+  BarChart3,
+  FileText
+} from 'lucide-react';
 
-export default function PatientDetail({ patientId }) {
+// Firebase 初期化 
+const firebaseConfig = typeof __firebase_config !== 'undefined'
+  ? JSON.parse(__firebase_config)
+  : {
+    apiKey: "AIzaSyCDbdD13KZ97acvznknETfDwkLhGpqRebQ",
+    authDomain: "rehab-connect-new-develop.firebaseapp.com",
+    projectId: "rehab-connect-new-develop",
+    storageBucket: "rehab-connect-new-develop.firebasestorage.app",
+    messagingSenderId: "1018902093138",
+    appId: "1:1018902093138:web:bd9d3ba0b69295fa42ee8b",
+  };
+
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'rehab-connect';
+
+const PatientDetail = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const targetId = id || 'demo-patient';
+
+  const [patient, setPatient] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState([]);
-  const [soap, setSoap] = useState({ s: '', o: '', a: '', p: '', rom: 120, vas: 0 });
-  const [historyRecords, setHistoryRecords] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [staffName, setStaffName] = useState('');
+  const [activeTab, setActiveTab] = useState('soap'); 
 
-  // グラフ用のrecords取得（既存機能）
-  useEffect(() => {
-    if (!patientId) return;
-    // Rule 1: Correct pathing
-    const q = collection(db, 'artifacts', appId, 'public', 'data', 'records');
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      // Rule 2: Manual filtering in memory
-      const filtered = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(r => r.patientId === patientId)
-        .sort((a, b) => a.date.localeCompare(b.date));
-      setRecords(filtered);
-    }, (err) => console.error(err));
-    return () => unsubscribe();
-  }, [patientId]);
 
-  // 履歴表示用のrecords取得（新機能）
+  const [inputData, setInputData] = useState({
+    s: '', o: '', a: '', p: '',
+    rom: '',
+    vas: ''
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
-    if (!patientId) return;
-    setLoading(true);
-    
-    const q = collection(db, 'artifacts', appId, 'public', 'data', 'records');
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    if (!targetId) return;
+
+    const isPreview = typeof __app_id !== 'undefined';
+    const patientRef = isPreview
+      ? doc(db, 'artifacts', appId, 'public', 'data', 'patients', targetId)
+      : doc(db, 'patients', targetId);
+
+    const fetchPatient = async () => {
       try {
-        // patientIdでフィルタリング
-        const filtered = snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(r => r.patientId === patientId);
-        
-        // 日付順にソート（新しい順）
-        const sorted = sortRecordsByDate(filtered, false);
-        setHistoryRecords(sorted);
-      } catch (error) {
-        console.error('履歴データの取得に失敗しました:', error);
+        const snap = await getDoc(patientRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          setPatient({ id: snap.id, ...data });
+        }
+      } catch (err) {
+        console.error("Fetch Error:", err);
       } finally {
         setLoading(false);
       }
-    }, (err) => {
-      console.error('履歴データの取得に失敗しました:', err);
-      setLoading(false);
-    });
-    
-    return () => unsubscribe();
-  }, [patientId]);
+    };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
+    const recordsRef = isPreview
+      ? collection(db, 'artifacts', appId, 'public', 'data', 'patients', targetId, 'records')
+      : collection(db, 'patients', targetId, 'records');
+
+    const q = query(recordsRef, orderBy('date', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    fetchPatient();
+    return () => unsubscribe();
+  }, [targetId]);
+
+  // 入力変更処理
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setInputData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSave = async () => {
+    if (!inputData.s && !inputData.o && !inputData.rom && !inputData.vas) return;
+    setIsSaving(true);
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'records'), {
-        patientId,
-        date: new Date().toISOString().split('T')[0],
-        ...soap,
-        staffName: staffName || '未記入',
-        timestamp: serverTimestamp()
+      const isPreview = typeof __app_id !== 'undefined';
+      const recordsRef = isPreview
+        ? collection(db, 'artifacts', appId, 'public', 'data', 'patients', targetId, 'records')
+        : collection(db, 'patients', targetId, 'records');
+
+      await addDoc(recordsRef, {
+        ...inputData,
+        date: serverTimestamp()
       });
-      setSoap({ s: '', o: '', a: '', p: '', rom: 120, vas: 0 });
-      setStaffName('');
-      alert('記録を保存しました！');
-    } catch (e) { 
-      console.error(e);
-      alert('保存に失敗しました。');
+
+      const patientRef = isPreview
+        ? doc(db, 'artifacts', appId, 'public', 'data', 'patients', targetId)
+        : doc(db, 'patients', targetId);
+
+      await updateDoc(patientRef, {
+        lastRom: inputData.rom,
+        lastVas: inputData.vas,
+        lastUpdated: serverTimestamp()
+      });
+
+      setInputData({ s: '', o: '', a: '', p: '', rom: '', vas: '' });
+      alert("記録を保存しました。経過履歴タブで確認できます。");
+      setActiveTab('history'); 
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  if (loading) return <div className="p-20 text-center font-bold text-slate-400">Loading...</div>;
+
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
-      {/* Progress Graphs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-3xl border shadow-sm">
-          <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><TrendingUp size={18} /> ROM (可動域) の推移</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={records}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="date" hide />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="rom" stroke="#2563eb" strokeWidth={3} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border shadow-sm">
-          <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Activity size={18} /> VAS (痛み) の推移</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={records}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="date" hide />
-                <YAxis domain={[0, 10]} />
-                <Tooltip />
-                <Line type="monotone" dataKey="vas" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+    <div className="w-full min-h-screen bg-slate-50 text-slate-900 pb-20">
 
-      {/* SOAP Input Form */}
-      <form onSubmit={handleSave} className="bg-white p-8 rounded-3xl border shadow-sm space-y-6">
-        <h3 className="text-xl font-bold border-b pb-4">リハビリ実施記録 (SOAP)</h3>
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <label className="text-xs font-bold text-slate-400 uppercase">ROM (度)</label>
-            <input type="number" className="w-full bg-slate-50 p-3 rounded-xl border-none mt-1" value={soap.rom} onChange={e => setSoap({ ...soap, rom: e.target.value })} />
+      <div className="max-w-6xl mx-auto px-4 pt-6">
+        <div className="bg-[#1a1f36] rounded-3xl p-8 text-white relative overflow-hidden shadow-2xl mb-8">
+          <div className="flex items-center gap-6 relative z-10">
+            <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-2xl font-black">
+              {patient?.name?.charAt(0) || 'ゲ'}
+            </div>
+            <div>
+              <h1 className="text-3xl font-black flex items-center gap-3">
+                <span>{patient?.name}</span><span> 様</span>
+              </h1>
+              <p className="text-blue-300 font-bold mt-1 opacity-80">{patient?.diagnosis || '疾患名未設定'}</p>
+            </div>
+            <button
+              onClick={() => { if (window.confirm("削除しますか？")) deleteDoc(doc(db, 'patients', targetId)).then(() => navigate('/patients')) }}
+              className="ml-auto p-3 hover:bg-white/10 rounded-full text-white/30 hover:text-red-400 transition-all"
+            >
+              <Trash2 size={24} />
+            </button>
           </div>
-          <div>
-            <label className="text-xs font-bold text-slate-400 uppercase">VAS (0-10)</label>
-            <input type="number" className="w-full bg-slate-50 p-3 rounded-xl border-none mt-1" value={soap.vas} onChange={e => setSoap({ ...soap, vas: e.target.value })} />
-          </div>
+          {/* 装飾用の背景デザイン */}
+          <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-blue-600/20 rounded-full blur-3xl"></div>
         </div>
-        <div>
-          <label className="text-xs font-bold text-slate-400 uppercase">記入者名</label>
-          <input 
-            type="text" 
-            className="w-full bg-slate-50 p-3 rounded-xl border-none mt-1" 
-            value={staffName} 
-            onChange={e => setStaffName(e.target.value)}
-            placeholder="担当者名を入力"
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SoapBox label="S" value={soap.s} onChange={v => setSoap({ ...soap, s: v })} />
-          <SoapBox label="O" value={soap.o} onChange={v => setSoap({ ...soap, o: v })} />
-          <SoapBox label="A" value={soap.a} onChange={v => setSoap({ ...soap, a: v })} />
-          <SoapBox label="P" value={soap.p} onChange={v => setSoap({ ...soap, p: v })} />
-        </div>
-        <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-black transition-colors flex items-center justify-center gap-2">
-          <Save size={20} /> 記録を保存する
-        </button>
-      </form>
 
-      {/* SOAP History Section (新規追加) */}
-      <div className="bg-white p-8 rounded-3xl border shadow-sm">
-        <h3 className="text-xl font-bold border-b pb-4 flex items-center gap-2">
-          <FileText size={22} />
-          治療経過履歴 (SOAP)
-        </h3>
-        
-        {loading ? (
-          <div className="text-center py-10 text-slate-400">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900 mx-auto mb-4"></div>
-            読み込み中...
-          </div>
-        ) : historyRecords.length === 0 ? (
-          <div className="text-center py-10 text-slate-400">
-            まだ記録がありません。
-          </div>
-        ) : (
-          <div className="space-y-4 mt-6">
-            {historyRecords.map((record) => (
-              <SoapHistoryCard key={record.id} record={record} />
-            ))}
-          </div>
-        )}
+        {/* タブナビゲーション */}
+        <div className="flex bg-slate-200/50 p-1.5 rounded-2xl w-fit mb-8 border border-slate-200">
+          {[
+            { id: 'graph', label: '分析グラフ', icon: BarChart3 },
+            { id: 'history', label: '経過履歴', icon: History },
+            { id: 'soap', label: 'SOAP入力', icon: FileText },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black text-sm transition-all ${activeTab === tab.id
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+                }`}
+            >
+              <tab.icon size={18} />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* コンテンツエリア */}
+        <div className="max-w-5xl">
+
+          {activeTab === 'soap' && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              {/* 数値入力エリア */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-4">ROM (度)</label>
+                  <input
+                    type="number"
+                    name="rom"
+                    value={inputData.rom}
+                    onChange={handleInputChange}
+                    className="w-full text-4xl font-black text-slate-800 outline-none bg-slate-50 p-4 rounded-2xl focus:ring-4 focus:ring-blue-100 transition-all"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-4">VAS (0-10)</label>
+                  <input
+                    type="number"
+                    name="vas"
+                    value={inputData.vas}
+                    onChange={handleInputChange}
+                    className="w-full text-4xl font-black text-slate-800 outline-none bg-slate-50 p-4 rounded-2xl focus:ring-4 focus:ring-red-100 transition-all"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              {/* SOAP入力エリア */}
+              <div className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {['s', 'o', 'a', 'p'].map((key) => (
+                    <div key={key} className="space-y-2">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">
+                        {key === 's' ? 'S' : key === 'o' ? 'O' : key === 'a' ? 'A' : 'P'}
+                      </label>
+                      <textarea
+                        name={key}
+                        className="w-full p-5 border border-slate-100 rounded-2xl text-sm min-h-[160px] bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                        value={inputData[key]}
+                        onChange={handleInputChange}
+                        placeholder={`${key.toUpperCase()}の内容を入力...`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="mt-10 w-full bg-[#1a1f36] text-white font-black py-5 rounded-2xl hover:bg-slate-800 shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50"
+                >
+                  <Save size={20} />
+                  <span>記録を保存して履歴を確認</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+              {records.length === 0 ? (
+                <div className="bg-white rounded-3xl p-20 text-center text-slate-300 font-bold border border-slate-200">
+                  記録はまだありません
+                </div>
+              ) : (
+                records.map((record) => (
+                  <div key={record.id} className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                      <span className="text-sm font-black text-slate-400">📅 {record.date?.toDate?.().toLocaleString('ja-JP') || '保存中'}</span>
+                      <div className="flex gap-4">
+                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-tighter">ROM: {record.rom}度</span>
+                        <span className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full uppercase tracking-tighter">VAS: {record.vas}</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-6">
+                      {['s', 'o', 'a', 'p'].map(k => (
+                        <div key={k}>
+                          <span className="text-[10px] font-black text-slate-300 uppercase block mb-1">{k}</span>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{record[k] || '-'}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'graph' && (
+            <div className="bg-white rounded-3xl p-20 text-center text-slate-300 font-bold border border-slate-200">
+              グラフ機能は現在準備中です
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
-}
+};
 
-function SoapBox({ label, value, onChange }) {
-  return (
-    <div className="space-y-1">
-      <span className="text-xs font-black text-slate-400">{label} (Subjective/Objective/etc.)</span>
-      <textarea className="w-full bg-slate-50 rounded-xl p-3 h-24 text-sm border-none focus:ring-2 focus:ring-blue-500" value={value} onChange={e => onChange(e.target.value)} />
-    </div>
-  );
-}
-
-// 履歴カードコンポーネント（新規追加）
-function SoapHistoryCard({ record }) {
-  const formattedDate = formatRecordDate(record.timestamp || record.date);
-  
-  return (
-    <div className="border border-slate-200 rounded-2xl p-6 hover:shadow-md transition-shadow bg-slate-50">
-      {/* ヘッダー部分 */}
-      <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200">
-        <div className="flex items-center gap-3">
-          <Clock size={18} className="text-blue-600" />
-          <span className="font-bold text-slate-800">{formattedDate}</span>
-        </div>
-        {record.staffName && (
-          <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-semibold">
-            {record.staffName}
-          </span>
-        )}
-      </div>
-
-      {/* 評価指標 */}
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div className="bg-white rounded-xl p-3 border border-slate-200">
-          <span className="text-xs text-slate-500 font-semibold block mb-1">ROM (可動域)</span>
-          <span className="text-2xl font-bold text-blue-600">{record.rom || '-'}°</span>
-        </div>
-        <div className="bg-white rounded-xl p-3 border border-slate-200">
-          <span className="text-xs text-slate-500 font-semibold block mb-1">VAS (痛み)</span>
-          <span className="text-2xl font-bold text-rose-600">{record.vas || '-'}/10</span>
-        </div>
-      </div>
-
-      {/* SOAP記録 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <SoapHistoryBox label="S (主観的データ)" value={record.s} />
-        <SoapHistoryBox label="O (客観的データ)" value={record.o} />
-        <SoapHistoryBox label="A (評価・アセスメント)" value={record.a} />
-        <SoapHistoryBox label="P (計画・プラン)" value={record.p} />
-      </div>
-    </div>
-  );
-}
-
-// 履歴表示用のSOAPボックス
-function SoapHistoryBox({ label, value }) {
-  const displayText = formatSoapField(value);
-  const isEmpty = displayText === '特記なし';
-  
-  return (
-    <div className="bg-white rounded-xl p-4 border border-slate-200">
-      <div className="text-xs font-bold text-slate-500 mb-2">{label}</div>
-      <div className={`text-sm ${isEmpty ? 'text-slate-400 italic' : 'text-slate-700'}`}>
-        {displayText}
-      </div>
-    </div>
-  );
-}
+export default PatientDetail;
